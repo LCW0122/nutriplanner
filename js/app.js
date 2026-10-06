@@ -52,7 +52,7 @@ var tt;function toast(m){var el=$('#toast');if(!el)return;el.textContent=m;el.hi
 
 /* ---------- state ---------- */
 var NOW=new Date(),TODAY=ymd(NOW),WS=monOf(NOW);
-var S={page:'today',sel:TODAY,rnd:{type:null,slot:'隨便'},bld:{slot:'午餐',protein:null,veg:null,starch:null,addons:[],custom:[]},last:'random',card:null,pending:null,draft:{photo:null,bloat:null,energy:null,crave:null,note:'',name:'',slot:(function(){var h=new Date().getHours();return h<11?'早餐':h<16?'午餐':h<21?'晚餐':'小食'})()},warn:null,eatInfo:false,open:{},
+var S={page:'today',sel:TODAY,rnd:{type:null,slot:'隨便'},bld:{slot:'午餐',proteins:[],vegs:[],starch:null,addons:[],custom:[]},last:'random',card:null,pending:null,draft:{photo:null,bloat:null,energy:null,crave:null,note:'',name:'',slot:(function(){var h=new Date().getHours();return h<11?'早餐':h<16?'午餐':h<21?'晚餐':'小食'})()},warn:null,eatInfo:false,open:{},
  cal:{y:NOW.getFullYear(),m:NOW.getMonth()+1,sel:TODAY},rv:ymd(WS),vs:{from:ymd(addDays(NOW,-27)),to:TODAY,show:false},bk:{text:'',confirm:false,msg:''},lib:false,addBoost:false};
 var weekDays=function(){var a=[];for(var i=0;i<7;i++)a.push(ymd(addDays(WS,i)));return a};
 var getDay=function(k){return DB.days[k]||{type:null,meals:[]}};
@@ -70,14 +70,18 @@ function allowed(g,it){var bf=S.bld.slot==='早餐',t=getDay(S.sel).type;if(!isO
  if(g==='veg')return bf?'hide':'ok';
  if(g==='starch'){if(bf){if(!it.bf)return'hide';if(t==='low'&&it.id!=='none')return'hide';return'ok'}if(t==='low'&&!it.lc)return'hide';return'ok'}
  if(g==='addon'){if(bf)return it.bf?'ok':'hide';return it.bfonly?'hide':'ok'}}
-function prune(){var b=S.bld;[['protein',PROTEINS],['veg',VEGS],['starch',STARCH]].forEach(function(g){if(b[g[0]]){var it=by(g[1],b[g[0]]);if(!it||allowed(g[0],it)!=='ok')b[g[0]]=null}});b.addons=b.addons.filter(function(id){var it=by(ADDONS,id);return it&&allowed('addon',it)==='ok'})}
-function builderReady(){var b=S.bld;return !!(getDay(S.sel).type&&b.protein&&b.starch&&(b.slot==='早餐'||b.veg))}
+function prune(){var b=S.bld;
+ b.proteins=(b.proteins||[]).filter(function(id){var it=by(PROTEINS,id);return it&&allowed('protein',it)==='ok'});
+ b.vegs=(b.vegs||[]).filter(function(id){var it=by(VEGS,id);return it&&allowed('veg',it)==='ok'});
+ if(b.starch){var it=by(STARCH,b.starch);if(!it||allowed('starch',it)!=='ok')b.starch=null}
+ b.addons=b.addons.filter(function(id){var it=by(ADDONS,id);return it&&allowed('addon',it)==='ok'})}
+function builderReady(){var b=S.bld;return !!(getDay(S.sel).type&&b.proteins.length&&b.starch&&(b.slot==='早餐'||b.vegs.length))}
 
 /* ---------- recipe generation ---------- */
-function bfCard(type,slot,any){var ex=rand(type==='low'?[1,2]:[1,2,3]),c={src:'random',type:type,slot:slot,any:any,veg:null,starch:'none',addons:[],method:'steam',oil:rand(OILS)};
- if(ex===1){c.protein='egg';c.addons=['avo']}
- else if(ex===2){c.protein=rand(['ctuna','csalmon','csard'])}
- else{c.protein='egg';c.starch=rand(['sweet','corn'])}
+function bfCard(type,slot,any){var ex=rand(type==='low'?[1,2]:[1,2,3]),c={src:'random',type:type,slot:slot,any:any,vegs:[],starch:'none',addons:[],method:'steam',oil:rand(OILS)};
+ if(ex===1){c.proteins=['egg'];c.addons=['avo']}
+ else if(ex===2){c.proteins=[rand(['ctuna','csalmon','csard'])]}
+ else{c.proteins=['egg'];c.starch=rand(['sweet','corn'])}
  return c}
 function makeRandom(type,slot){var any=slot==='隨便';if(any)slot=rand(['午餐','晚餐']);
  if(slot==='早餐')return bfCard(type,slot,any);
@@ -93,49 +97,98 @@ function makeRandom(type,slot){var any=slot==='隨便';if(any)slot=rand(['午餐
  else{var ra=sp.filter(function(s){return !s.warn&&s.id!=='none'});sid=(wpick(ra)||{id:'none'}).id}
  var ad=[];if(Math.random()<.35){var ap=enabled(ADDONS).filter(function(a){return !a.bfonly&&!a.bf||a.id==='avo'});var a1=wpick(ap);if(a1)ad.push(a1.id)}
  var v=wpick(enabled(VEGS));
- return{src:'random',type:type,slot:slot,any:any,protein:p.id,veg:v.id,starch:sid,addons:ad,method:rand(MORDER),oil:rand(OILS),fruit:fruit,vegDinner:vegDinner&&!!p.v}}
-function fromBuilder(){var b=S.bld,t=getDay(S.sel).type;return{src:'builder',type:t,slot:b.slot,protein:b.protein,veg:b.slot==='早餐'?null:b.veg,starch:b.starch,addons:b.addons.slice(),custom:b.custom.slice(),method:'steam',oil:rand(OILS),vegDinner:t==='plan'&&b.slot==='晚餐'&&!!by(PROTEINS,b.protein).v}}
+ return{src:'random',type:type,slot:slot,any:any,proteins:[p.id],vegs:[v.id],starch:sid,addons:ad,method:rand(MORDER),oil:rand(OILS),fruit:fruit,vegDinner:vegDinner&&!!p.v}}
+function fromBuilder(){var b=S.bld,t=getDay(S.sel).type,proteins=b.proteins.slice();
+ var vegDinner=t==='plan'&&b.slot==='晚餐'&&proteins.length>0&&proteins.every(function(id){return by(PROTEINS,id).v});
+ return{src:'builder',type:t,slot:b.slot,proteins:proteins,vegs:b.slot==='早餐'?[]:b.vegs.slice(),starch:b.starch,addons:b.addons.slice(),custom:b.custom.slice(),method:'steam',oil:rand(OILS),vegDinner:vegDinner}}
+
+/* ---------- named dish suggestions: common ingredient combos get a real named recipe instead of the generic description ---------- */
+function sameSet(a,b){if(a.length!==b.length)return false;var sa=a.slice().sort(),sb=b.slice().sort();for(var i=0;i<sa.length;i++)if(sa[i]!==sb[i])return false;return true}
+function isSubset(req,have){for(var i=0;i<req.length;i++)if(have.indexOf(req[i])<0)return false;return true}
+var NAMED_DISHES=[
+ {proteins:['egg'],vegs:['tomato','spinach'],title:'蔬菜烘蛋',emoji:'🍳🍅🥬',timeMin:15,
+  por:['雞蛋 2–3 隻','蕃茄 1 個','菠菜 1 碗'],
+  steps:['雞蛋 2–3 隻打散，加少許胡椒調味，唔加鹽。','蕃茄切粒，菠菜洗淨瀝乾（如揀埋其他菜，一併切好）。',
+   function(oil){return '易潔鑊燒熱，加 1 茶匙'+oil+'，中火將蕃茄炒軟身，加入菠菜炒至微軟。'},
+   '倒入蛋液鋪勻，細火加蓋烘 6–8 分鐘至大致凝固，反轉或移入已預熱焗爐 180°C 再烘 3–5 分鐘至熟透。','切件上碟。']},
+ {proteins:['salmon'],vegs:['asp'],title:'香煎三文魚配蘆筍',emoji:'🐟🥬',timeMin:20,
+  por:['三文魚 1–2 個手掌','蘆筍不限'],
+  steps:['三文魚抹乾，用薑絲、胡椒同少許檸檬汁醃 10 分鐘。',
+   function(oil){return '易潔鑊燒熱，下 1 茶匙'+oil+'，魚皮向下煎 3–4 分鐘至金黃香脆，反面再煎 2–3 分鐘至剛熟。'},
+   '蘆筍修剪老莖，用滾水灼 2 分鐘至脆身，瀝乾。','魚同蘆筍一齊上碟，擠少許檸檬汁提味。']},
+ {proteins:['shrimp'],vegs:['broc'],title:'蒜蓉西蘭花炒蝦仁',emoji:'🦐🥦',timeMin:15,
+  por:['蝦 1–2 個手掌','西蘭花不限'],
+  steps:['蝦去殼去腸，洗淨抹乾，用胡椒同少許檸檬汁略醃。',
+   function(oil){return '鑊燒熱，下 1 茶匙'+oil+'爆香蒜片，放入蝦仁快炒 1–2 分鐘至轉色，盛起。'},
+   '西蘭花切小朵，用滾水灼 2 分鐘，瀝乾。','同鑊加少許水，將西蘭花同蝦仁回鑊快炒 1 分鐘，用胡椒調味，唔加蠔油。']}
+];
+['chickb','chickl'].forEach(function(pid){NAMED_DISHES.push({proteins:[pid],vegs:['shiitake'],title:'薑蔥蒸雞配冬菇',emoji:'🍗🍄',timeMin:25,
+ por:[(by(PROTEINS,pid)||{}).n+' 1–2 個手掌','冬菇不限'],
+ steps:[(by(PROTEINS,pid)||{}).n+'去走皮同可見脂肪，用薑絲、蔥段、胡椒醃 15 分鐘。','冬菇用暖水浸軟，切片。',
+  '雞同冬菇一齊放入碟，隔水大火蒸 18–20 分鐘，戳到無血水為止。','蒸好倒走多餘水份，灑少許蔥花。']})});
+NAMED_DISHES.push({proteins:['beef'],vegs:['mushv'],title:'菇菌炒牛肉（次選，少食）',emoji:'🥩🍄',timeMin:15,
+ por:['牛 1 個手掌（次選，少食）','各類菇不限'],
+ steps:['牛肉切薄片，用薑汁、胡椒同少許生粉醃 10 分鐘，走鹽走糖。',
+  function(oil){return '鑊燒熱至好熱，下 1 茶匙'+oil+'，牛肉快炒 1–2 分鐘至轉色，盛起，唔好炒老。'},
+  function(oil){return '同鑊加少許'+oil+'炒香菇菌 2–3 分鐘至軟身，加少許水。'},
+  '牛肉回鑊快炒 30 秒拌勻，即上碟，保持嫩滑。']});
+function matchNamedDish(proteinIds,vegIds){var best=null;NAMED_DISHES.forEach(function(d){if(sameSet(proteinIds,d.proteins)&&isSubset(d.vegs,vegIds)){if(!best||d.vegs.length>best.vegs.length)best=d}});return best}
 function cookStep(p,m,oil){var mi=MORDER.indexOf(m),t=(CK[p.c]||CK.tofu)[mi],c=p.c;
  if(c==='egg'){return[ '雞蛋加 1.5 倍溫水拌勻，隔水細火蒸 10 分鐘成水蛋。','細火用 1 茶匙'+oil+'煎成荷包蛋或炒蛋，約 4 分鐘。','倒入小焗碗，焗爐 180°C 焗 10 分鐘。','隔水燉蛋 12 分鐘至凝固。','倒入小焗碗，焗爐 180°C 焗 10 分鐘。'][mi]}
  return[ '隔水大火蒸 '+t+' 分鐘'+(c==='fish'?'至魚肉剛熟，倒走蒸魚水':c==='chicken'?'，戳到無血水為止':'至熟透')+'。','鑊燒熱，加 1 茶匙'+oil+'，中火快炒 '+t+' 分鐘'+(c==='chicken'||c==='pork'||c==='red'?'至熟透，肉心唔可以見紅':'')+'。','焗爐預熱 200°C，掃少少'+oil+'，烤 '+t+' 分鐘，中途反轉一次。','加薑片同少量水，細火燉 '+t+' 分鐘至軟腍。','焗爐 180°C，用錫紙包好焗 '+t+' 分鐘。'][mi]}
+function cookStepGeneric(ps,m,oil){var mi=MORDER.indexOf(m),t=Math.max.apply(null,ps.map(function(p){return(CK[p.c]||CK.tofu)[mi]}));
+ return[ '隔水大火蒸 '+t+' 分鐘，戳到無血水、魚肉剛熟為止，倒走多餘水份。','鑊燒熱，加 1 茶匙'+oil+'，中火將蛋白質一齊快炒 '+t+' 分鐘，至全部熟透，肉類中心唔可以見紅。','焗爐預熱 200°C，掃少少'+oil+'，烤 '+t+' 分鐘，中途反轉一次，至全部熟透。','加薑片同少量水，細火燉 '+t+' 分鐘至全部熟透軟腍。','焗爐 180°C，用錫紙包好焗 '+t+' 分鐘至全部熟透。'][mi]}
+function prepLine(p){return {fish:p.n+'抹乾，修走多餘脂肪，用薑絲、胡椒同少量檸檬汁醃 10 分鐘。',chicken:p.n+'去走皮同可見脂肪，用薑、蒜蓉、胡椒同檸檬汁醃 15 分鐘。',shell:p.n+'洗淨抹乾（蝦去殼去腸），用薑、蒜蓉、胡椒醃 5 分鐘。',pork:p.n+'切走可見肥膏，用薑、胡椒同檸檬汁醃 15 分鐘，少用梳打粉。',red:p.n+'切走可見脂肪（鴨、鵝去皮），用薑、胡椒醃 15 分鐘。',tofu:p.n+'洗淨切好，用薑絲、胡椒調味。',bean:p.n+'瀝乾沖洗。',egg:'雞蛋打入碗，加胡椒，唔加糖。',cold:p.n+'拌勻，可加蔥花同少量檸檬汁'+(p.note?'（'+p.note+'）':'')+'。'}[p.c]}
+function vegLines(vs,m,oil,cold,proteinNames){var rawList=[],cookList=[];
+ vs.forEach(function(v){if(v.raw===2||(v.raw===1&&m==='steam')||cold)rawList.push(v);else cookList.push(v)});
+ var lines=[];
+ if(rawList.length)lines.push(rawList.map(function(v){return v.n}).join('、')+'切件，加檸檬汁、胡椒同 1 茶匙亞麻籽油涼拌。亞麻籽油只用涼拌，唔好加熱。');
+ if(cookList.length){var names=cookList.map(function(v){return v.n}).join('、');
+  if(m==='steam')lines.push(names+'洗淨切段，用滾水灼 2 分鐘至翠綠，瀝乾。');
+  else if(m==='fry')lines.push('鑊中加 1 茶匙'+oil+'爆香蒜片，'+names+'輕炒 2–3 分鐘，加少許水焗軟，唔加糖同重醬油。');
+  else if(m==='stew')lines.push(names+'洗淨切段，最後 10 分鐘放入同燉。');
+  else lines.push(names+'同'+proteinNames+'一齊放入，最後 8–10 分鐘同焗。')}
+ return lines}
 function derive(c){
  if(c.eat)return{title:c.eat.t,time:'外食',emoji:c.eat.e,por:c.eat.por,steps:c.eat.steps,tags:['外食改法','少醬汁'],eat:1,noMethod:1,fruit:c.fruit};
- var p=by(PROTEINS,c.protein),s=by(STARCH,c.starch),v=c.veg?by(VEGS,c.veg):null,m=c.method,oil=c.oil,mi=MORDER.indexOf(m),low=c.type==='low',steps=[],por=[],tags=[];
+ var ps=(c.proteins||[]).map(function(id){return by(PROTEINS,id)}).filter(Boolean);
+ var vs=(c.vegs||[]).map(function(id){return by(VEGS,id)}).filter(Boolean);
+ var s=by(STARCH,c.starch),m=c.method,oil=c.oil,mi=MORDER.indexOf(m),low=c.type==='low',steps=[],por=[],tags=[];
  var custom=(c.custom||[]);
  if(c.slot==='早餐'){
   var addN=c.addons.map(function(id){return by(ADDONS,id)});var parts=[];
-  if(s.id!=='none')parts.push(s.n);parts.push(p.c==='egg'?'烚蛋':p.n);addN.forEach(function(a){parts.push(a.id==='egg2'?'烚蛋':a.n)});
+  if(s.id!=='none')parts.push(s.n);ps.forEach(function(p){parts.push(p.c==='egg'?'烚蛋':p.n)});addN.forEach(function(a){parts.push(a.id==='egg2'?'烚蛋':a.n)});
   parts=parts.filter(function(x,i){return parts.indexOf(x)===i});
   var title=parts.join('＋');
-  if(p.c==='egg'||addN.some(function(a){return a.id==='egg2'}))steps.push('雞蛋放入滾水，水再滾後煮約 8 分鐘成烚蛋，過冷河後去殼。');
-  if(p.c==='can')steps.push(p.n+'瀝走水或油，加檸檬汁同胡椒。');
+  if(ps.some(function(p){return p.c==='egg'})||addN.some(function(a){return a.id==='egg2'}))steps.push('雞蛋放入滾水，水再滾後煮約 8 分鐘成烚蛋，過冷河後去殼。');
+  ps.forEach(function(p){if(p.c==='can')steps.push(p.n+'瀝走水或油，加檸檬汁同胡椒。')});
   if(s.id==='sweet')steps.push('蕃薯連皮洗淨，蒸 20 分鐘至軟。');if(s.id==='corn')steps.push('粟米連衣蒸或煮 10 分鐘。');
   if(c.addons.indexOf('avo')>-1)steps.push('牛油果切半，去核，加少許檸檬汁同胡椒。');
   steps.push('用胡椒、檸檬調味，唔加糖、唔用重醬油。');
-  por.push(p.c==='egg'?'雞蛋 1–2 隻':p.n+' 1 罐');if(s.id!=='none')por.push(s.por);addN.forEach(function(a){if(a.id!=='egg2')por.push(a.por)});
-  if(p.deep)tags.push('抗發炎');if(low||s.id==='none')tags.push('穩血糖');tags.push('少油');tags.push('無醬油');
-  var em=(p.c==='can'?'🥫':'🥚')+(c.addons.indexOf('avo')>-1?'🥑':'')+(s.e||'');
+  ps.forEach(function(p){por.push(p.c==='egg'?'雞蛋 1–2 隻':p.n+' 1 罐')});if(s.id!=='none')por.push(s.por);addN.forEach(function(a){if(a.id!=='egg2')por.push(a.por)});
+  if(ps.some(function(p){return p.deep}))tags.push('抗發炎');if(low||s.id==='none')tags.push('穩血糖');tags.push('少油');tags.push('無醬油');
+  var em=ps.map(function(p){return p.c==='can'?'🥫':'🥚'}).join('')+(c.addons.indexOf('avo')>-1?'🥑':'')+(s.e||'');
   return{title:title,time:'約 15 分鐘',emoji:em,por:por,steps:steps,tags:tags,fruit:c.fruit,noMethod:1}}
- var cold=p.c==='cold';
- var title=(cold?p.n:MN[m]+p.n)+'・'+v.n+(s.id==='none'?'':'・'+(s.t||s.n));
- var pm;if(p.v&&p.c!=='egg')pm=p.n+' 1–2 碗';else if(p.c==='egg')pm=p.id==='eggw'?'蛋白 2–3 隻':'雞蛋 1–2 隻';else if(p.c==='red')pm=p.n+' 1 個手掌（次選，少食）';else pm=p.n+' 1–2 個手掌';
- por.push(pm);por.push(v.n+'不限'+(low?'（份量加倍）':''));por.push(s.por);c.addons.forEach(function(id){por.push(by(ADDONS,id).por)});custom.forEach(function(x){por.push(x)});
- var prep={fish:p.n+'抹乾，修走多餘脂肪，用薑絲、胡椒同少量檸檬汁醃 10 分鐘。',chicken:p.n+'去走皮同可見脂肪，用薑、蒜蓉、胡椒同檸檬汁醃 15 分鐘。',shell:p.n+'洗淨抹乾（蝦去殼去腸），用薑、蒜蓉、胡椒醃 5 分鐘。',pork:p.n+'切走可見肥膏，用薑、胡椒同檸檬汁醃 15 分鐘，少用梳打粉。',red:p.n+'切走可見脂肪（鴨、鵝去皮），用薑、胡椒醃 15 分鐘。',tofu:p.n+'洗淨切好，用薑絲、胡椒調味。',bean:p.n+'瀝乾沖洗。',egg:'雞蛋打入碗，加胡椒，唔加糖。',cold:p.n+'拌勻，可加蔥花同少量檸檬汁'+(p.note?'（'+p.note+'）':'')+'。'}[p.c];
- steps.push(prep);if(!cold)steps.push(cookStep(p,m,oil));
+ var cold=ps.length>0&&ps.every(function(p){return p.c==='cold'});
+ var nd=matchNamedDish(c.proteins||[],c.vegs||[]);
+ var pNames=ps.map(function(p){return p.n}).join('＋'),vNames=vs.map(function(v){return v.n}).join('＋');
+ var title=nd?nd.title:(cold?pNames:MN[m]+pNames)+'・'+vNames+(s.id==='none'?'':'・'+(s.t||s.n));
+ if(nd){nd.por.forEach(function(x){por.push(x)})}
+ else{ps.forEach(function(p){var pm;if(p.v&&p.c!=='egg')pm=p.n+' 1–2 碗';else if(p.c==='egg')pm=p.id==='eggw'?'蛋白 2–3 隻':'雞蛋 1–2 隻';else if(p.c==='red')pm=p.n+' 1 個手掌（次選，少食）';else pm=p.n+' 1–2 個手掌';por.push(pm)});
+  vs.forEach(function(v){por.push(v.n+'不限'+(low?'（份量加倍）':''))})}
+ por.push(s.por);c.addons.forEach(function(id){por.push(by(ADDONS,id).por)});custom.forEach(function(x){por.push(x)});
+ if(nd){nd.steps.forEach(function(st){steps.push(typeof st==='function'?st(oil):st)})}
+ else{ps.forEach(function(p){steps.push(prepLine(p))});if(!cold)steps.push(ps.length===1?cookStep(ps[0],m,oil):cookStepGeneric(ps,m,oil));
+  vegLines(vs,m,oil,cold,pNames).forEach(function(l){steps.push(l)})}
  if(s.id!=='none'){var sm=s.m;var st=s.rice?s.por+'，外食份量，唔好食多。':s.lc?s.por+'，滾水灼 2 分鐘，瀝乾墊底，代替澱粉。':s.id==='chestnut'?'栗子（原粒無糖）蒸熱。':s.n+'洗淨處理，蒸 '+sm+' 分鐘至軟，份量：'+s.por+'。';steps.push(st)}
- var vs;if(v.raw===2||(v.raw===1&&m==='steam')||cold)vs=v.n+'切件，加檸檬汁、胡椒同 1 茶匙亞麻籽油涼拌。亞麻籽油只用涼拌，唔好加熱。';
- else if(m==='steam')vs=v.n+'洗淨切段，用滾水灼 2 分鐘至翠綠，瀝乾。';
- else if(m==='fry')vs='鑊中加 1 茶匙'+oil+'爆香蒜片，'+v.n+'輕炒 2–3 分鐘，加少許水焗軟，唔加糖同重醬油。';
- else if(m==='stew')vs=v.n+'洗淨切段，最後 10 分鐘放入同燉。';
- else vs=v.n+'同'+p.n+'一齊放入，最後 8–10 分鐘同焗。';
- steps.push(vs);
  var ad=c.addons.map(function(id){return by(ADDONS,id).por}).concat(custom);if(ad.length)steps.push('加上：'+ad.join('、')+'。');
  steps.push('用薑、蔥、蒜、胡椒、檸檬調味，唔加糖、唔用重醬油，上碟。');
- if(p.deep)tags.push('抗發炎');if(low||s.id==='none'||s.lc)tags.push('穩血糖');tags.push('少油');tags.push('無醬油');
- if(c.vegDinner)tags.push('素食');if(p.second)tags.push('次選');
- var cm=CK[p.c]?CK[p.c][mi]:5,tm=Math.round((10+Math.max(cold?0:cm,s.m||0))/5)*5;
- var pe={fish:'🐟',chicken:'🍗',shell:'🦐',pork:'🥩',red:'🥩',tofu:'🥢',bean:'🫘',egg:'🥚',cold:'🫘',can:'🥫'}[p.c]||'🍽️';
- return{title:title,time:'約 '+tm+' 分鐘',emoji:pe+(v.e||'🥬')+(s.e||''),por:por,steps:steps,tags:tags,fruit:c.fruit,noMethod:cold}}
+ if(ps.some(function(p){return p.deep}))tags.push('抗發炎');if(low||s.id==='none'||s.lc)tags.push('穩血糖');tags.push('少油');tags.push('無醬油');
+ if(c.vegDinner)tags.push('素食');if(ps.some(function(p){return p.second}))tags.push('次選');
+ var cm=Math.max.apply(null,ps.map(function(p){return CK[p.c]?CK[p.c][mi]:5}).concat([0])),tm=nd?nd.timeMin:Math.round((10+Math.max(cold?0:cm,s.m||0))/5)*5;
+ var peMap={fish:'🐟',chicken:'🍗',shell:'🦐',pork:'🥩',red:'🥩',tofu:'🥢',bean:'🫘',egg:'🥚',cold:'🫘',can:'🥫'};
+ var emoji=nd?nd.emoji:ps.map(function(p){return peMap[p.c]||'🍽️'}).join('')+(vs[0]&&vs[0].e||'🥬')+(s.e||'');
+ return{title:title,time:'約 '+tm+' 分鐘',emoji:emoji,por:por,steps:steps,tags:tags,fruit:c.fruit,noMethod:cold,named:!!nd}}
 
 /* ---------- helpers for stats ---------- */
 function feelText(f){var o=[];if(!f)return'';if(f.energy!=null)o.push(f.energy>=3?'精力好':f.energy<=1?'精力低':'');if(f.bloat!=null)o.push(f.bloat>=3?'腹脹明顯':f.bloat<=1?'腹脹低':'');if(f.crave!=null)o.push(f.crave>=3?'甜食慾望強':f.crave<=1?'甜食慾望低':'');return o.filter(Boolean).slice(0,2).join(' · ')}
@@ -184,15 +237,15 @@ function groupHtml(g,list,sel,act,multi,sub){var out='',cur=null,t=getDay(S.sel)
  list.forEach(function(it){var a=allowed(g,it);if(a==='hide')return;
   if(sub&&it.g!==cur){if(cur!==null)out+='</div>';cur=it.g;out+='<div class="eyebrow" style="margin-top:8px;font-weight:400">'+it.g+'</div><div class="group" role="group">'}
   var on=multi?sel.indexOf(it.id)>-1:sel===it.id;
-  out+='<button class="choice" data-act="'+act+'" data-id="'+it.id+'" data-fid="'+g+it.id+'" aria-pressed="'+on+'">'+it.n+(it.warn?'':'')+'</button>'});
+  out+='<button class="choice" data-act="'+act+'" data-g="'+g+'" data-id="'+it.id+'" data-fid="'+g+it.id+'" aria-pressed="'+on+'">'+it.n+(it.warn?'':'')+'</button>'});
  if(sub&&cur!==null)out+='</div>';return sub?out:'<div class="group" role="group">'+out+'</div>'}
 function renderBuilder(){var t=getDay(S.sel).type,b=S.bld,el=$('#builder'),bf=b.slot==='早餐';el.classList.toggle('locked',!t);
  var h='<h2 id="h-builder">自己揀這一餐</h2>';
  if(!t)h+='<div class="warn" style="margin-top:12px">請先揀今日係邊種日子：去「今日」揀日子，再標 Plan、Low Carb 或 Rest，就可以自己揀。<div class="row" style="margin-top:8px"><button class="btn" data-act="nav" data-p="today" data-fid="gototoday">去「今日」揀類型</button></div></div>';
  h+='<div class="lockable"><div class="stack"><div class="row"><span class="help">餐次</span>'+SLOTS_B.map(function(s){return'<button class="chip sm" data-act="bslot" data-s="'+s+'" data-fid="bs'+s+'" aria-pressed="'+(b.slot===s)+'">'+s+'</button>'}).join('')+'</div>';
  h+='<p class="help">模式跟隨上面已標的那一日'+(t?'：'+TYPES[t].full:'')+(bf?'。早餐只出三款營養師例子。':'')+'</p></div><hr class="rule">';
- h+='<div class="eyebrow">蛋白質 · 揀 1</div><div class="stack" style="margin-top:8px">'+groupHtml('protein',PROTEINS,b.protein,'bpick',0,1)+'</div>';
- if(!bf)h+='<hr class="rule"><div class="eyebrow">菜 · 揀 1</div><div class="stack" style="margin-top:8px">'+groupHtml('veg',VEGS,b.veg,'bpick',0,0)+'</div>';
+ h+='<div class="eyebrow">蛋白質 · 可多選</div><div class="stack" style="margin-top:8px">'+groupHtml('protein',PROTEINS,b.proteins,'bpick',1,1)+'</div>';
+ if(!bf)h+='<hr class="rule"><div class="eyebrow">菜 · 可多選</div><div class="stack" style="margin-top:8px">'+groupHtml('veg',VEGS,b.vegs,'bpick',1,0)+'</div>';
  h+='<hr class="rule"><div class="eyebrow">澱粉 · 揀 1</div>'+(t==='low'?'<div class="warn" style="margin-top:8px">Low Carb 日唔食澱粉，只可以用蒟蒻麵、芋絲或不加。</div>':'')+'<div class="stack" style="margin-top:8px">'+groupHtml('starch',STARCH,b.starch,'bpick',0,0)+'</div>';
  h+='<hr class="rule"><div class="eyebrow">可加 · 可多選，可唔選</div><div class="stack" style="margin-top:8px">'+groupHtml('addon',ADDONS,b.addons,'baddon',1,0);
  h+='<div class="row">'+b.custom.map(function(x,i){return'<button class="choice" aria-pressed="true" data-act="rmcustom" data-i="'+i+'" data-fid="cu'+i+'">'+esc(x)+' ×</button>'}).join('')+'</div>';
@@ -206,9 +259,10 @@ function renderBuilder(){var t=getDay(S.sel).type,b=S.bld,el=$('#builder'),bf=b.
 function renderResult(){var c=S.card,el=$('#result');
  if(!c){el.innerHTML='<div class="empty">揀咗之後撳生成，菜式會喺呢度出現。</div>';return}
  var d=derive(c),acc=!!S.pending;var q='https://www.google.com/search?tbm=isch&q='+encodeURIComponent(d.title.replace(/外食改法・|外食例子・/,''));
+ var rq=d.named?'https://www.google.com/search?q='+encodeURIComponent(d.title+' 做法'):null;
  var h='<div class="card"><div class="eyebrow">'+(c.src==='random'?'隨機建議':'自己揀')+' · '+TYPES[c.type].full+' · '+(c.any?'隨便 · ':'')+c.slot+'</div><h2 class="title">'+esc(d.title)+'</h2><div class="help">'+esc(d.time)+'</div><hr class="rule"><div class="emoji" data-slot="ref" role="img" aria-label="示意圖">'+d.emoji+'</div><div class="fruit" style="margin-top:4px">示意圖，非實拍</div><div class="tags" style="margin-top:8px">'+d.tags.map(function(t){return'<span class="tag">'+t+'</span>'}).join('')+'</div>';
  h+='<hr class="rule"><div class="sec">份量</div><div>'+d.por.map(esc).join(' · ')+'</div>'+(d.fruit?'<div class="help" style="margin-top:4px">水果提示：'+esc(d.fruit)+'</div>':'')+'<hr class="rule"><div class="sec">做法</div><ol class="steps">'+d.steps.map(function(s){return'<li>'+esc(s)+'</li>'}).join('')+'</ol>';
- h+='<div class="actions"><button class="btn primary" data-act="accept" data-fid="accept">'+(acc?'已揀，去記錄':'呢款得')+'</button>'+(c.src==='random'?'<button class="btn" data-act="rgen" data-fid="reroll">再隨機</button>':'')+(d.noMethod?'':'<button class="btn" data-act="method" data-fid="method">換烹調法</button>')+(d.eat?'':'<button class="btn" data-act="edit" data-fid="edit">改其中一樣</button>')+'<button class="btn" data-act="copy" data-fid="copy">複製</button><a class="btn" href="'+q+'" target="_blank" rel="noopener">睇參考相 ↗</a></div></div>';
+ h+='<div class="actions"><button class="btn primary" data-act="accept" data-fid="accept">'+(acc?'已揀，去記錄':'呢款得')+'</button>'+(c.src==='random'?'<button class="btn" data-act="rgen" data-fid="reroll">再隨機</button>':'')+(d.noMethod?'':'<button class="btn" data-act="method" data-fid="method">換烹調法</button>')+(d.eat?'':'<button class="btn" data-act="edit" data-fid="edit">改其中一樣</button>')+'<button class="btn" data-act="copy" data-fid="copy">複製</button><a class="btn" href="'+q+'" target="_blank" rel="noopener">睇參考相 ↗</a>'+(rq?'<a class="btn" href="'+rq+'" target="_blank" rel="noopener">搵做法參考 ↗</a>':'')+'</div></div>';
  el.innerHTML=h}
 function sliderRow(k,label,a,b){var v=S.draft[k];return'<label class="slider'+(v==null?' untouched':'')+'" data-k="'+k+'">'+label+'<div><input type="range" min="0" max="4" step="1" id="sl-'+k+'" value="'+(v==null?2:v)+'" data-fid="sl'+k+'"><div class="ends"><span>'+a+'</span><span>'+b+'</span></div></div></label>'}
 function mealRows(list,thumbs){return list.slice().sort(function(a,b){return a.t<b.t?-1:1}).map(function(m){var ft=feelText(m.feel),ph=m.photoId&&PH[m.photoId];return'<div class="meal"><time>'+m.t+'</time><span>'+esc(m.slot)+'</span><div class="m">'+esc(m.name)+(ft?'<div class="fb">'+ft+'</div>':'')+(m.note?'<div class="fb">'+esc(m.note)+'</div>':'')+(thumbs&&ph?'<div class="thumbs"><img src="'+ph+'" alt="餐相"></div>':'')+'</div>'+(thumbs===2?'<span></span>':'<button class="x" data-act="rm" data-id="'+m.id+'" data-fid="rm'+m.id+'" aria-label="刪除這一餐">×</button>')+'</div>'}).join('')}
@@ -331,7 +385,10 @@ function onAct(a,el){var ds=el.dataset;switch(a){
  case'rslot':S.rnd.slot=ds.s;S.last='random';renderAll();break;
  case'rgen':genRandom();break;
  case'bslot':S.bld.slot=ds.s;S.last='builder';prune();renderAll();break;
- case'bpick':{var key=/^protein/.test(ds.fid)?'protein':/^veg/.test(ds.fid)?'veg':'starch',it=by(key==='protein'?PROTEINS:key==='veg'?VEGS:STARCH,ds.id);S.bld[key]=S.bld[key]===ds.id?null:ds.id;S.last='builder';S.warn=null;if(S.bld[key]&&it.warn)S.warn={item:it.n,reason:it.warn==='含麩質'?'含麩質':'要留意',suggest:'番薯、粟米或米製品',key:key};renderAll();break}
+ case'bpick':{var key=ds.g,it=by(key==='protein'?PROTEINS:key==='veg'?VEGS:STARCH,ds.id);S.last='builder';S.warn=null;
+  if(key==='starch'){S.bld.starch=S.bld.starch===ds.id?null:ds.id;if(S.bld.starch&&it.warn)S.warn={item:it.n,reason:it.warn==='含麩質'?'含麩質':'要留意',suggest:'番薯、粟米或米製品',key:'starch'}}
+  else{var arr=key==='protein'?S.bld.proteins:S.bld.vegs,i=arr.indexOf(ds.id);if(i>-1)arr.splice(i,1);else arr.push(ds.id)}
+  renderAll();break}
  case'baddon':{var i=S.bld.addons.indexOf(ds.id);if(i>-1)S.bld.addons.splice(i,1);else S.bld.addons.push(ds.id);S.last='builder';renderAll();break}
  case'addcustom':{var v=($('#custom').value||'').trim();if(!v)break;S.bld.custom.push(v);S.warn=checkWarn(v);if(S.warn)S.warn.custom=v;S.last='builder';renderAll();break}
  case'rmcustom':S.bld.custom.splice(+ds.i,1);S.warn=null;renderAll();break;
@@ -341,7 +398,7 @@ function onAct(a,el){var ds=el.dataset;switch(a){
  case'bgen':genBuilder();break;
  case'bar':if(S.last==='random')genRandom();else genBuilder();break;
  case'method':S.card.method=MORDER[(MORDER.indexOf(S.card.method)+1)%5];S.pending=null;renderAll();break;
- case'edit':{var c=S.card;if(!c||c.eat)break;if(!getDay(S.sel).type){ensureDay(S.sel).type=c.type;persist()}S.bld={slot:c.slot,protein:c.protein,veg:c.veg,starch:c.starch,addons:(c.addons||[]).slice(),custom:(c.custom||[]).slice()};S.last='builder';prune();renderAll();scrollToEl('#builder');if(c.src==='random')toast('已將今次嘅選擇放入自己揀');break}
+ case'edit':{var c=S.card;if(!c||c.eat)break;if(!getDay(S.sel).type){ensureDay(S.sel).type=c.type;persist()}S.bld={slot:c.slot,proteins:(c.proteins||[]).slice(),vegs:(c.vegs||[]).slice(),starch:c.starch,addons:(c.addons||[]).slice(),custom:(c.custom||[]).slice()};S.last='builder';prune();renderAll();scrollToEl('#builder');if(c.src==='random')toast('已將今次嘅選擇放入自己揀');break}
  case'accept':{if(S.pending){showPage('log');break}if(!getDay(S.sel).type){ensureDay(S.sel).type=S.card.type;S.rnd.type=S.card.type;persist()}S.pending=S.card;showPage('log');toast('已揀，可加相片同體感，再儲存');break}
  case'copy':{var d=derive(S.card);copyText(d.title+'\n份量：'+d.por.join(' · ')+'\n做法：\n'+d.steps.map(function(s,i){return(i+1)+' '+s}).join('\n'));break}
  case'rmphoto':S.draft.photo=null;renderLog();break;

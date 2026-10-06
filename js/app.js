@@ -34,6 +34,17 @@ function photoAll(cb){if(!idb)return cb();try{var rq=idb.transaction('p').object
 function photoPut(id,data){PH[id]=data;if(!idb)return;try{idb.transaction('p','readwrite').objectStore('p').put(data,id)}catch(e){}}
 function photoDel(id){delete PH[id];if(!idb)return;try{idb.transaction('p','readwrite').objectStore('p').delete(id)}catch(e){}}
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(DB))}catch(e){toast('儲存唔到，瀏覽器可能封鎖咗本機儲存')}}
+
+/* ---------- cloud sync (optional, user's own Google Sheet via Apps Script) ---------- */
+var SYNCKEY='planner.sync',QKEY='planner.sync.queue';
+var SYNC={url:'',on:false};
+function loadSync(){try{var r=JSON.parse(localStorage.getItem(SYNCKEY)||'null');if(r){SYNC.url=r.url||'';SYNC.on=!!r.on}}catch(e){}}
+function saveSync(){try{localStorage.setItem(SYNCKEY,JSON.stringify(SYNC))}catch(e){}}
+function loadQueue(){try{return JSON.parse(localStorage.getItem(QKEY)||'[]')}catch(e){return[]}}
+function saveQueue(q){try{localStorage.setItem(QKEY,JSON.stringify(q))}catch(e){}}
+function queuePush(row){var q=loadQueue();q.push(row);if(q.length>200)q=q.slice(-200);saveQueue(q)}
+function sendRow(row){if(!SYNC.on||!SYNC.url){return}try{fetch(SYNC.url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(row)}).catch(function(){queuePush(row)})}catch(e){queuePush(row)}}
+function flushQueue(){if(!SYNC.on||!SYNC.url)return;var q=loadQueue();if(!q.length)return;saveQueue([]);q.forEach(sendRow)}
 function loadDB(){
  try{var r=JSON.parse(localStorage.getItem(KEY)||'null');if(r){DB.days=r.days||{};DB.meas=r.meas||{};DB.boost=r.boost||DB.boost;DB.off=r.off||DB.off;return}}catch(e){}
  try{var o=JSON.parse(localStorage.getItem('planner.v1')||'null');if(o&&o.weekStart&&o.days){var ws=parse(o.weekStart);o.days.forEach(function(d,i){if(!d||(!d.type&&!d.meals.length))return;var k=ymd(addDays(ws,i));DB.days[k]={type:d.type,meals:d.meals.map(function(m){var pid=null;if(m.photo){pid='p'+m.id;PH[pid]=m.photo;MIG.push([pid,m.photo])}return{id:m.id,t:m.t,slot:m.slot,name:m.name,feel:m.feel,note:m.note||'',photoId:pid}})}});persist()}}catch(e){}}
@@ -291,6 +302,13 @@ function renderSettings(){var bk=S.bk;
  h+='<div class="card lib"><h2>食材庫</h2><p class="help">每個食材標有來源：<b>原文</b> = 營養師 PDF，<b>建議</b> = 按原則推導，待營養師確認。唔想出現嘅食材可以取消剔選，隨機同自己揀都唔會再出現。</p>';
  [['蛋白質',PROTEINS],['蔬菜',VEGS],['澱粉',STARCH],['健康油脂及配料',ADDONS]].forEach(function(g){h+='<details class="fold"'+(S.open['l'+g[0]]?' open':'')+' data-hist="l'+g[0]+'"><summary>'+g[0]+'（'+g[1].length+'）</summary>'+g[1].map(function(it){return'<label><input type="checkbox" data-act="toggleitem" data-id="'+it.id+'"'+(isOn(it)?' checked':'')+'>'+it.n+'<span class="src">'+(it.s==='p'?'原文':'建議')+(it.warn?' · '+it.warn+'，預設停用':'')+(it.note?' · '+it.note:'')+'</span></label>'}).join('')+'</details>'});
  h+='</div>';
+ var q=loadQueue();
+ h+='<div class="card"><h2>雲端同步（Google 試算表）</h2><p class="help">每次儲存記錄，自動傳一行去你自己嘅 Google 試算表。呢個係額外備份，唔代替下載備份檔案。</p>';
+ h+='<label class="help" for="syncurl">Apps Script 網址</label><input class="in" id="syncurl" placeholder="https://script.google.com/.../exec" value="'+esc(SYNC.url)+'" style="margin-top:4px">';
+ h+='<label style="margin-top:8px;display:flex;align-items:center;gap:8px"><input type="checkbox" id="syncon"'+(SYNC.on?' checked':'')+'> 啟用同步</label>';
+ h+='<div class="row" style="margin-top:8px"><button class="btn primary" style="width:auto" data-act="syncsave" data-fid="syncsave">儲存設定</button>'+(q.length?'<button class="btn" data-act="syncflush" data-fid="syncflush">重試 '+q.length+' 筆未傳</button>':'')+'</div>';
+ if(S.syncMsg)h+='<p class="help" style="margin-top:8px">'+esc(S.syncMsg)+'</p>';
+ h+='</div>';
  h+='<div class="card"><h2>鎖住</h2><p class="help">鎖住後，下次要輸入密碼先打開。呢個只係畫面鎖，記錄一直只存喺呢部機。</p><button class="btn" style="margin-top:12px" data-act="lock" data-fid="lock">立即鎖住</button></div>';
  $('#page-settings').innerHTML=h}
 
@@ -331,8 +349,10 @@ function onAct(a,el){var ds=el.dataset;switch(a){
  case'save':{var pd=S.pending;var nm=pd?derive(pd).title:(S.draft.name||'').trim();if(!pd&&!nm&&!S.draft.photo){toast('請寫低食咗乜，或者上載相片');break}if(!nm)nm='相片記錄';
   var f={bloat:S.draft.bloat,energy:S.draft.energy,crave:S.draft.crave},has=f.bloat!=null||f.energy!=null||f.crave!=null,n=new Date(),id='m'+Date.now(),pid=null;
   if(S.draft.photo){pid='p'+id;photoPut(pid,S.draft.photo)}
-  ensureDay(S.sel).meals.push({id:id,t:pad(n.getHours())+':'+pad(n.getMinutes()),slot:pd?pd.slot:S.draft.slot,name:nm,feel:has?f:null,note:S.draft.note.trim(),photoId:pid});
-  S.pending=null;S.card=null;resetDraft();persist();renderAll();toast('已儲存');break}
+  var slot=pd?pd.slot:S.draft.slot,t=pad(n.getHours())+':'+pad(n.getMinutes());
+  ensureDay(S.sel).meals.push({id:id,t:t,slot:slot,name:nm,feel:has?f:null,note:S.draft.note.trim(),photoId:pid});
+  sendRow({date:S.sel,time:t,slot:slot,name:nm,feel:feelText(has?f:null),note:S.draft.note.trim(),hasPhoto:!!pid});
+  S.pending=null;S.card=null;resetDraft();persist();renderAll();toast('已儲存'+(SYNC.on&&SYNC.url?'，已傳去雲端':''));break}
  case'qslot':S.draft.slot=ds.s;renderLog();break;
  case'rm':{var dy=ensureDay(S.sel);dy.meals=dy.meals.filter(function(m){if(m.id===ds.id&&m.photoId)photoDel(m.photoId);return m.id!==ds.id});persist();renderAll();toast('已刪除');break}
  case'calnav':{var m=S.cal.m+(+ds.n),y=S.cal.y;if(m<1){m=12;y--}if(m>12){m=1;y++}S.cal={y:y,m:m,sel:y+'-'+pad(m)+'-01'};if(y===NOW.getFullYear()&&m===NOW.getMonth()+1)S.cal.sel=TODAY;renderCal();break}
@@ -352,6 +372,8 @@ function onAct(a,el){var ds=el.dataset;switch(a){
  case'boostadd':S.addBoost=!S.addBoost;renderSettings();break;
  case'booston':DB.boost.push(ds.id);persist();renderSettings();break;
  case'toggleitem':{var on=el.checked;DB.off=DB.off.filter(function(x){return x!==ds.id});if(!on)DB.off.push(ds.id);persist();break}
+ case'syncsave':{SYNC.url=($('#syncurl').value||'').trim();SYNC.on=$('#syncon').checked;saveSync();S.syncMsg='已儲存。';if(SYNC.on&&SYNC.url)flushQueue();renderSettings();break}
+ case'syncflush':flushQueue();S.syncMsg='已嘗試重新上傳。';renderSettings();break;
  }}
 document.addEventListener('click',function(e){var el=e.target.closest('[data-act]');if(!el||el.disabled)return;if(el.dataset.act==='toggleitem')return;onAct(el.dataset.act,el)});
 document.addEventListener('input',function(e){var t=e.target;
@@ -370,6 +392,6 @@ window.addEventListener('hashchange',function(){var p=location.hash.slice(1);if(
 
 /* ---------- init ---------- */
 var start=function(){var p=location.hash.slice(1);showPage($('#page-'+p)?p:'today',true)};
-loadDB();start();
+loadDB();loadSync();start();flushQueue();
 idbOpen(function(){photoAll(function(){MIG.forEach(function(x){photoPut(x[0],x[1])});MIG=[];start()})});
 })();

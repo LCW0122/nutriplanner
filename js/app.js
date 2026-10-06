@@ -42,7 +42,7 @@ function loadSync(){try{var r=JSON.parse(localStorage.getItem(SYNCKEY)||'null');
 function saveSync(){try{localStorage.setItem(SYNCKEY,JSON.stringify(SYNC))}catch(e){}}
 function loadQueue(){try{return JSON.parse(localStorage.getItem(QKEY)||'[]')}catch(e){return[]}}
 function saveQueue(q){try{localStorage.setItem(QKEY,JSON.stringify(q))}catch(e){}}
-function queuePush(row){var q=loadQueue();q.push(row);if(q.length>200)q=q.slice(-200);saveQueue(q)}
+function queuePush(row){var q=loadQueue();q.push(row);if(q.length>30)q=q.slice(-30);saveQueue(q)}
 function sendRow(row){if(!SYNC.on||!SYNC.url){return}try{fetch(SYNC.url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(row)}).catch(function(){queuePush(row)})}catch(e){queuePush(row)}}
 function flushQueue(){if(!SYNC.on||!SYNC.url)return;var q=loadQueue();if(!q.length)return;saveQueue([]);q.forEach(sendRow)}
 function loadDB(){
@@ -357,7 +357,7 @@ function renderSettings(){var bk=S.bk;
  [['蛋白質',PROTEINS],['蔬菜',VEGS],['澱粉',STARCH],['健康油脂及配料',ADDONS]].forEach(function(g){h+='<details class="fold"'+(S.open['l'+g[0]]?' open':'')+' data-hist="l'+g[0]+'"><summary>'+g[0]+'（'+g[1].length+'）</summary>'+g[1].map(function(it){return'<label><input type="checkbox" data-act="toggleitem" data-id="'+it.id+'"'+(isOn(it)?' checked':'')+'>'+it.n+'<span class="src">'+(it.s==='p'?'原文':'建議')+(it.warn?' · '+it.warn+'，預設停用':'')+(it.note?' · '+it.note:'')+'</span></label>'}).join('')+'</details>'});
  h+='</div>';
  var q=loadQueue();
- h+='<div class="card"><h2>雲端同步（Google 試算表）</h2><p class="help">每次儲存記錄，自動傳一行去你自己嘅 Google 試算表。呢個係額外備份，唔代替下載備份檔案。</p>';
+ h+='<div class="card"><h2>雲端同步（Google 試算表）</h2><p class="help">每次儲存記錄，自動傳一行去你自己嘅 Google 試算表；有相嘅話，相片會存入 Google Drive 嘅「Planner Photos」資料夾，試算表會有連結。呢個係額外備份，唔代替下載備份檔案。</p>';
  h+='<label class="help" for="syncurl">Apps Script 網址</label><input class="in" id="syncurl" placeholder="https://script.google.com/.../exec" value="'+esc(SYNC.url)+'" style="margin-top:4px">';
  h+='<label style="margin-top:8px;display:flex;align-items:center;gap:8px"><input type="checkbox" id="syncon"'+(SYNC.on?' checked':'')+'> 啟用同步</label>';
  h+='<div class="row" style="margin-top:8px"><button class="btn primary" style="width:auto" data-act="syncsave" data-fid="syncsave">儲存設定</button>'+(q.length?'<button class="btn" data-act="syncflush" data-fid="syncflush">重試 '+q.length+' 筆未傳</button>':'')+'</div>';
@@ -408,7 +408,7 @@ function onAct(a,el){var ds=el.dataset;switch(a){
   if(S.draft.photo){pid='p'+id;photoPut(pid,S.draft.photo)}
   var slot=pd?pd.slot:S.draft.slot,t=pad(n.getHours())+':'+pad(n.getMinutes());
   ensureDay(S.sel).meals.push({id:id,t:t,slot:slot,name:nm,feel:has?f:null,note:S.draft.note.trim(),photoId:pid});
-  sendRow({date:S.sel,time:t,slot:slot,name:nm,feel:feelText(has?f:null),note:S.draft.note.trim(),hasPhoto:!!pid});
+  sendRow({date:S.sel,time:t,slot:slot,name:nm,feel:feelText(has?f:null),note:S.draft.note.trim(),hasPhoto:!!pid,photo:pid?S.draft.photo:null});
   S.pending=null;S.card=null;resetDraft();persist();renderAll();toast('已儲存'+(SYNC.on&&SYNC.url?'，已傳去雲端':''));break}
  case'qslot':S.draft.slot=ds.s;renderLog();break;
  case'rm':{var dy=ensureDay(S.sel);dy.meals=dy.meals.filter(function(m){if(m.id===ds.id&&m.photoId)photoDel(m.photoId);return m.id!==ds.id});persist();renderAll();toast('已刪除');break}

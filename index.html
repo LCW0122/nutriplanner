@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-Hant-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Planner</title>
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="googlebot" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="description" content="跟住營養師計劃食嘅 7 日彈性飲食規劃同記餐">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+HK:wght@400;600;700&family=Noto+Serif+HK:wght@700&display=swap">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/styles.css">
+<script src="js/gate.js"></script>
+</head>
+<body>
+<div id="gate" role="dialog" aria-modal="true" aria-labelledby="gate-h">
+<form id="gate-form" class="gate-card" autocomplete="on">
+<h1 id="gate-h" class="wordmark">Planner</h1>
+<p class="help">請輸入密碼先可以打開。</p>
+<label class="eyebrow" for="gpw">密碼</label>
+<input class="in" id="gpw" name="password" type="password" autocomplete="current-password" required>
+<label class="gkeep"><input type="checkbox" id="gkeep" checked> 記住呢部機（30 日）</label>
+<p id="gmsg" class="gmsg" role="alert"></p>
+<button class="btn primary" type="submit">打開</button>
+</form>
+</div>
+<div class="wrap">
+<header class="top"><div><h1 class="wordmark">Planner</h1><div class="sub">跟住營養師計劃食</div></div><nav class="topnav" id="topnav" aria-label="主選單"></nav><span class="weekchip">第 1 週</span></header>
+<main id="page-today" class="page">
+<section class="card" id="board" aria-labelledby="h-board"></section>
+<section class="card" id="daysum" aria-label="揀咗嗰日"></section>
+</main>
+<main id="page-gen" class="page" hidden>
+<h1 class="ph">生成菜式</h1>
+<section class="card" id="ctx" aria-label="揀咗嗰日"></section>
+<section class="card" id="random" aria-labelledby="h-random"></section>
+<section class="card builder" id="builder" aria-labelledby="h-builder"></section>
+<section id="result" aria-label="菜式"></section>
+</main>
+<main id="page-log" class="page" hidden>
+<h1 class="ph">記錄</h1>
+<section class="card" id="log" aria-labelledby="h-log"></section>
+</main>
+<main id="page-more" class="page" hidden></main>
+<main id="page-cal" class="page" hidden></main>
+<main id="page-review" class="page" hidden></main>
+<main id="page-guide" class="page" hidden></main>
+<main id="page-settings" class="page" hidden></main>
+</div>
+<div class="bar-fixed" id="barwrap"><button class="btn primary" id="bar" data-act="bar"></button></div>
+<nav class="tabs" id="tabs" aria-label="主選單"></nav>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<script src="data/library.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
